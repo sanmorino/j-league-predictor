@@ -28,7 +28,7 @@ class PredictEngine:
 
     def load_team_mapping(self):
         """データベースからチームのマッピングを取得する"""
-       
+        print(f'load_team_mapping:{db}')
         if db is not None:
             df = db.fetch_team_mapping()
             if not df.empty:
