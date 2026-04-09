@@ -1,0 +1,5 @@
+.env
+*.json.bak
+__pycache__/
+*.pyc
+xgboost_model.json  # ← モデルファイルをGitに含めるか要検討
