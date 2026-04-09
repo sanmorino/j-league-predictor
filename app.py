@@ -9,9 +9,6 @@ try:
 except ImportError:
     st.error("必要なモジュールが見つかりません。")
     db = None
-st.write("Debug - Supabase db:", db)
-response = db.fetch_team_mapping()
-st.write("fetch_team_mapping", response)
 
 # --- UI Aesthetics ---
 st.set_page_config(page_title="J.League Predictor PRO", layout="wide", initial_sidebar_state="collapsed")
@@ -298,8 +295,6 @@ with tab1:
         for col, h in zip(cols, headers):
             col.write(f"**{h}**")
 
-        st.write("Debug - Team Dict:", team_dict)
-        
         for idx, row in df_batch.iterrows():
             c1, c2, c3, c4, c5, c6, c7 = st.columns([0.5, 2, 2, 1, 2, 1, 1])
             c1.write(str(row["No."]))
