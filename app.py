@@ -9,7 +9,7 @@ try:
 except ImportError:
     st.error("必要なモジュールが見つかりません。")
     db = None
-st.write("Debug - Team Dict:", db)
+st.write("Debug - Supabase db:", db)
 # --- UI Aesthetics ---
 st.set_page_config(page_title="J.League Predictor PRO", layout="wide", initial_sidebar_state="collapsed")
 
