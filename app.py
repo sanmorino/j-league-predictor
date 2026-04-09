@@ -294,6 +294,8 @@ with tab1:
         headers = ["No.", "ホーム", "アウェイ", "AI予想", "確率", "結果", "判定"]
         for col, h in zip(cols, headers):
             col.write(f"**{h}**")
+
+        st.write("Debug - Team Dict:", team_dict)
         
         for idx, row in df_batch.iterrows():
             c1, c2, c3, c4, c5, c6, c7 = st.columns([0.5, 2, 2, 1, 2, 1, 1])
