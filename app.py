@@ -10,6 +10,9 @@ except ImportError:
     st.error("必要なモジュールが見つかりません。")
     db = None
 st.write("Debug - Supabase db:", db)
+response = db.table("team_mapping").select("*").execute()
+st.write("fetch_team_mapping", response)
+
 # --- UI Aesthetics ---
 st.set_page_config(page_title="J.League Predictor PRO", layout="wide", initial_sidebar_state="collapsed")
 
