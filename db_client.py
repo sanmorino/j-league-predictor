@@ -99,7 +99,6 @@ class SupabaseDB:
         """Supabase の team_mapping テーブルからチームのマスターデータを取得"""
         if not self.client: return pd.DataFrame()
         response = self.client.table("team_mapping").select("*").execute()
-        st.write("fetch_team_mapping", response)
         return pd.DataFrame(response.data)
 
 db = SupabaseDB()
