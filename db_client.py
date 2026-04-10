@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import hashlib
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
@@ -24,6 +25,64 @@ class SupabaseDB:
         # 簡易的に全件取得（件数が多い場合はページネーションが必要だが、Jリーグデータなら一度に取得可能と想定）
         response = self.client.table(table_name).select("*").execute()
         return pd.DataFrame(response.data)
+
+    def _hash_password(self, password: str) -> str:
+        """パスワードのハッシュ化（簡易版）"""
+        return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+    def sign_up(self, username, password):
+        """新規ユーザー登録"""
+        if not self.client: return False, "DB接続エラー"
+        hashed = self._hash_password(password)
+        try:
+            # 既存チェック
+            res = self.client.table("app_users").select("*").eq("username", username).execute()
+            if res.data and len(res.data) > 0:
+                return False, "そのユーザー名は既に使われています"
+            
+            self.client.table("app_users").insert({"username": username, "password_hash": hashed}).execute()
+            return True, "登録が完了しました"
+        except Exception as e:
+            return False, f"登録エラー: {str(e)}"
+
+    def sign_in(self, username, password):
+        """ログイン処理"""
+        if not self.client: return False, "DB接続エラー", None
+        hashed = self._hash_password(password)
+        res = self.client.table("app_users").select("*").eq("username", username).eq("password_hash", hashed).execute()
+        if res.data and len(res.data) > 0:
+            return True, "ログイン成功", res.data[0]["id"]
+        return False, "ユーザー名またはパスワードが間違っています", None
+
+    def upsert_user_team_stats(self, user_id, team_id, data_json):
+        """ユーザーごとのカスタムチーム指標を保存"""
+        if not self.client: return None
+        from datetime import datetime
+        import json
+        # JSON文字列で渡された場合 dict に変換する（JSONBカラムの型不一致エラー回避）
+        if isinstance(data_json, str):
+            try:
+                data_dict = json.loads(data_json)
+            except Exception:
+                data_dict = {}
+        else:
+            data_dict = data_json
+
+        now = datetime.now().isoformat()
+        return self.client.table("user_team_stats").upsert({
+            "user_id": user_id,
+            "team_id": team_id,
+            "data": data_dict,
+            "updated_at": now
+        }, on_conflict="user_id, team_id").execute()
+
+    def fetch_user_team_stats(self, user_id, team_id):
+        """特定のユーザー・チームのカスタム指標を取得"""
+        if not self.client: return None
+        response = self.client.table("user_team_stats").select("data").eq("user_id", user_id).eq("team_id", team_id).execute()
+        if response.data and len(response.data) > 0:
+            return response.data[0]["data"]
+        return None
 
     def upsert_custom_stats(self, team_id: str, data_json: str):
         """カスタム指標を保存（存在すれば更新、なければ挿入）"""

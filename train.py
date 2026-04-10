@@ -66,7 +66,8 @@ def train_model():
 
     # メタデータなど、特徴量として不要なカラムを除外
     drop_columns = [
-        'home_team_id', 'home_score', 'away_team_id', 'away_score'
+        'home_team_id', 'home_score', 'away_team_id', 'away_score',
+        'home_attacks', 'away_attacks', 'diff_attacks'
     ]
     
     X = df.drop(columns=['result'] + [col for col in drop_columns if col in df.columns], errors='ignore')

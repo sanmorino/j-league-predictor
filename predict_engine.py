@@ -90,9 +90,89 @@ class PredictEngine:
             return pd.read_csv(path)
         return None
 
-    def create_features(self, home_team_id, away_team_id):
+    def get_team_base_stats(self, team_id):
+        """CSVから対象チームの全基礎指標をまとめて返す（編集用初期値として使用）"""
+        if not os.path.exists(self.data_dir): return {}
+        stats = {}
+        
+        df_goals = self._load_csv("Goal Points.csv")
+        df_def = self._load_csv("Deffence Points.csv")
+        df_atk = self._load_csv("Attack Points.csv")
+        df_agi = self._load_csv("AGI,KAGI.csv")
+        df_save = self._load_csv("Save Points.csv")
+        df_ccr = self._load_csv("Chance Construction Rate.csv")
+        df_cap = self._load_csv("Capture Points.csv")
+        df_pass = self._load_csv("Pass Points.csv")
+        df_dribble = self._load_csv("Dribble Points.csv")
+
+        def add_stat(df, key, out_key):
+            d = self._get_team_stats(df, team_id)
+            stats[out_key] = float(d.get(key, 0.0))
+
+        add_stat(df_goals, 'goal_points', 'Goal Points')
+        add_stat(df_def, 'deffence_points', 'Deffence Points')
+        add_stat(df_atk, 'attack_points', 'Attack Points')
+        add_stat(df_agi, 'agi', 'AGI')
+        add_stat(df_save, 'save_points', 'Save Points')
+        add_stat(df_ccr, 'chance_construct_rate', 'Chance Construction Rate')
+        add_stat(df_ccr, 'shooting_success_rate', 'Shooting Success Rate')
+        add_stat(df_cap, 'capture_points', 'Capture Points')
+        add_stat(df_pass, 'pass_points', 'Pass Points')
+        add_stat(df_dribble, 'dribble_points', 'Dribble Points')
+        
+        return stats
+
+    def get_base_stats_ranges(self):
+        """全データベース（CSV）から各指標の最小値と最大値を抽出する（スライダの範囲用）"""
+        if not os.path.exists(self.data_dir): return {}
+        ranges = {}
+        
+        df_goals = self._load_csv("Goal Points.csv")
+        df_def = self._load_csv("Deffence Points.csv")
+        df_atk = self._load_csv("Attack Points.csv")
+        df_agi = self._load_csv("AGI,KAGI.csv")
+        df_save = self._load_csv("Save Points.csv")
+        df_ccr = self._load_csv("Chance Construction Rate.csv")
+        df_cap = self._load_csv("Capture Points.csv")
+        df_pass = self._load_csv("Pass Points.csv")
+        df_dribble = self._load_csv("Dribble Points.csv")
+
+        def add_range(df, col_name, out_key):
+            if df is not None and col_name in df.columns and not df.empty:
+                try:
+                    # 型の不一致などに備えて数値化
+                    s = pd.to_numeric(df[col_name], errors='coerce').dropna()
+                    if s.empty: raise ValueError
+                    c_min = float(s.min())
+                    c_max = float(s.max())
+                    if c_min == c_max:
+                        c_min -= 1.0
+                        c_max += 1.0
+                    ranges[out_key] = {"min": c_min, "max": c_max}
+                except:
+                    ranges[out_key] = {"min": 0.0, "max": 100.0}
+            else:
+                ranges[out_key] = {"min": 0.0, "max": 100.0}
+
+        add_range(df_goals, 'goal_points', 'Goal Points')
+        add_range(df_def, 'deffence_points', 'Deffence Points')
+        add_range(df_atk, 'attack_points', 'Attack Points')
+        add_range(df_agi, 'agi', 'AGI')
+        add_range(df_save, 'save_points', 'Save Points')
+        add_range(df_ccr, 'chance_construct_rate', 'Chance Construction Rate')
+        add_range(df_ccr, 'shooting_success_rate', 'Shooting Success Rate')
+        add_range(df_cap, 'capture_points', 'Capture Points')
+        add_range(df_pass, 'pass_points', 'Pass Points')
+        add_range(df_dribble, 'dribble_points', 'Dribble Points')
+        
+        return ranges
+
+    def create_features(self, home_team_id, away_team_id, custom_memory_stats=None):
         """両チームの最新データから特徴量ベクトルを生成する"""
         
+        if custom_memory_stats is None:
+            custom_memory_stats = {}
+            
         if not os.path.exists(self.data_dir):
             return pd.DataFrame()
             
@@ -120,7 +200,6 @@ class PredictEngine:
         if not h_goals or not a_goals:
             return pd.DataFrame()
             
-        
         h_def = self._get_team_stats(df_def, home_team_id)
         a_def = self._get_team_stats(df_def, away_team_id)
         
@@ -145,36 +224,50 @@ class PredictEngine:
         h_dribble = self._get_team_stats(df_dribble, home_team_id)
         a_dribble = self._get_team_stats(df_dribble, away_team_id)
 
+        def safe_get_custom_stats(memory_stats, tid):
+            try:
+                tid_int = int(float(tid))
+                for k, v in memory_stats.items():
+                    if int(float(k)) == tid_int:
+                        return v
+            except:
+                pass
+            return {}
+
+        # カスタム（My Stats）データの取得（メモリキャッシュ引数から取得する）
+        h_custom = safe_get_custom_stats(custom_memory_stats, home_team_id)
+        a_custom = safe_get_custom_stats(custom_memory_stats, away_team_id)
+
+        def get_val(custom_dict, custom_key, csv_dict, csv_key):
+            if custom_key in custom_dict:
+                return float(custom_dict[custom_key])
+            try: return float(csv_dict.get(csv_key, 0.0))
+            except: return 0.0
+
         # 基礎項目の構築
         base_features = {}
         
-        def safe_val(d, key):
-            try: return float(d.get(key, 0.0))
-            except: return 0.0
+        base_features['home_goal_points'] = get_val(h_custom, 'Goal Points', h_goals, 'goal_points')
+        base_features['home_deffence_points'] = get_val(h_custom, 'Deffence Points', h_def, 'deffence_points')
+        base_features['home_attack_points'] = get_val(h_custom, 'Attack Points', h_atk, 'attack_points')
+        base_features['home_agi'] = get_val(h_custom, 'AGI', h_agi, 'agi')
+        base_features['home_save_points'] = get_val(h_custom, 'Save Points', h_save, 'save_points')
+        base_features['home_chance_construct_rate'] = get_val(h_custom, 'Chance Construction Rate', h_ccr, 'chance_construct_rate')
+        base_features['home_shooting_success_rate'] = get_val(h_custom, 'Shooting Success Rate', h_ccr, 'shooting_success_rate')
+        base_features['home_capture_points'] = get_val(h_custom, 'Capture Points', h_cap, 'capture_points')
+        base_features['home_pass_points'] = get_val(h_custom, 'Pass Points', h_pass, 'pass_points')
+        base_features['home_dribble_points'] = get_val(h_custom, 'Dribble Points', h_dribble, 'dribble_points')
 
-        base_features['home_goal_points'] = safe_val(h_goals, 'goal_points')
-        base_features['home_deffence_points'] = safe_val(h_def, 'deffence_points')
-        base_features['home_attack_points'] = safe_val(h_atk, 'attack_points')
-        base_features['home_agi'] = safe_val(h_agi, 'agi')
-        base_features['home_save_points'] = safe_val(h_save, 'save_points')
-        base_features['home_attacks'] = safe_val(h_atk, 'attacks')
-        base_features['home_chance_construct_rate'] = safe_val(h_ccr, 'chance_construct_rate')
-        base_features['home_shooting_success_rate'] = safe_val(h_ccr, 'shooting_success_rate')
-        base_features['home_capture_points'] = safe_val(h_cap, 'capture_points')
-        base_features['home_pass_points'] = safe_val(h_pass, 'pass_points')
-        base_features['home_dribble_points'] = safe_val(h_dribble, 'dribble_points')
-
-        base_features['away_goal_points'] = safe_val(a_goals, 'goal_points')
-        base_features['away_deffence_points'] = safe_val(a_def, 'deffence_points')
-        base_features['away_attack_points'] = safe_val(a_atk, 'attack_points')
-        base_features['away_agi'] = safe_val(a_agi, 'agi')
-        base_features['away_save_points'] = safe_val(a_save, 'save_points')
-        base_features['away_attacks'] = safe_val(a_atk, 'attacks')
-        base_features['away_chance_construct_rate'] = safe_val(a_ccr, 'chance_construct_rate')
-        base_features['away_shooting_success_rate'] = safe_val(a_ccr, 'shooting_success_rate')
-        base_features['away_capture_points'] = safe_val(a_cap, 'capture_points')
-        base_features['away_pass_points'] = safe_val(a_pass, 'pass_points')
-        base_features['away_dribble_points'] = safe_val(a_dribble, 'dribble_points')
+        base_features['away_goal_points'] = get_val(a_custom, 'Goal Points', a_goals, 'goal_points')
+        base_features['away_deffence_points'] = get_val(a_custom, 'Deffence Points', a_def, 'deffence_points')
+        base_features['away_attack_points'] = get_val(a_custom, 'Attack Points', a_atk, 'attack_points')
+        base_features['away_agi'] = get_val(a_custom, 'AGI', a_agi, 'agi')
+        base_features['away_save_points'] = get_val(a_custom, 'Save Points', a_save, 'save_points')
+        base_features['away_chance_construct_rate'] = get_val(a_custom, 'Chance Construction Rate', a_ccr, 'chance_construct_rate')
+        base_features['away_shooting_success_rate'] = get_val(a_custom, 'Shooting Success Rate', a_ccr, 'shooting_success_rate')
+        base_features['away_capture_points'] = get_val(a_custom, 'Capture Points', a_cap, 'capture_points')
+        base_features['away_pass_points'] = get_val(a_custom, 'Pass Points', a_pass, 'pass_points')
+        base_features['away_dribble_points'] = get_val(a_custom, 'Dribble Points', a_dribble, 'dribble_points')
 
         # 差分項目の構築
         base_features['diff_goal_points'] = base_features['home_goal_points'] - base_features['away_goal_points']
@@ -184,7 +277,6 @@ class PredictEngine:
         base_features['diff_save_points'] = base_features['home_save_points'] - base_features['away_save_points']
         base_features['diff_chance_construct_rate'] = base_features['home_chance_construct_rate'] - base_features['away_chance_construct_rate']
         base_features['diff_shooting_success_rate'] = base_features['home_shooting_success_rate'] - base_features['away_shooting_success_rate']
-        base_features['diff_attacks'] = base_features['home_attacks'] - base_features['away_attacks']
         base_features['diff_capture_points'] = base_features['home_capture_points'] - base_features['away_capture_points']
         base_features['diff_pass_points'] = base_features['home_pass_points'] - base_features['away_pass_points']
         base_features['diff_dribble_points'] = base_features['home_dribble_points'] - base_features['away_dribble_points']
@@ -210,22 +302,28 @@ class PredictEngine:
             
         return df_target
 
-    def predict(self, home_team_id, away_team_id):
+    def predict(self, home_team_id, away_team_id, custom_memory_stats=None):
         """特徴量を生成して勝敗を予測する"""
-        if self.model is None:
-            return None, None, {"error": "モデルがロードされていません。先に学習を行ってください。"}
+        try:
+            if self.model is None:
+                return None, None, {"error": "モデルがロードされていません。先に学習を行ってください。"}
+                
+            df_features = self.create_features(home_team_id, away_team_id, custom_memory_stats=custom_memory_stats)
+            if df_features.empty:
+                return None, None, {"error": "必要な指標データ（CSV）または対象チームのデータが見つかりません。"}
+                
+            # XGBoostの入力に合わせてキャスト
+            X = df_features.apply(pd.to_numeric, errors='coerce').fillna(0)
             
-        df_features = self.create_features(home_team_id, away_team_id)
-        if df_features.empty:
-            return None, None, {"error": "必要な指標データ（CSV）または対象チームのデータが見つかりません。"}
+            # 予測 (0: Draw, 1: Home Win, 2: Away Win)
+            pred_class = int(self.model.predict(X)[0])
+            # 確率
+            pred_proba = self.model.predict_proba(X)[0].tolist()
             
-        # XGBoostの入力に合わせてキャスト
-        X = df_features.apply(pd.to_numeric, errors='coerce').fillna(0)
-        
-        # 予測 (0: Draw, 1: Home Win, 2: Away Win)
-        pred_class = int(self.model.predict(X)[0])
-        # 確率
-        pred_proba = self.model.predict_proba(X)[0].tolist()
-        
-        features_json = json.dumps(df_features.iloc[0].to_dict(), ensure_ascii=False)
-        return pred_class, pred_proba, features_json
+            features_json = json.dumps(df_features.iloc[0].to_dict(), ensure_ascii=False)
+            return pred_class, pred_proba, features_json
+        except Exception as e:
+            import traceback
+            print(f"Error in predict for H:{home_team_id} A:{away_team_id}")
+            traceback.print_exc()
+            return None, None, {"error": f"予測処理中に内部エラーが発生しました: {str(e)}"}
